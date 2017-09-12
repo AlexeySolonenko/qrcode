@@ -16,29 +16,36 @@
  *  limitations under the License
  *
  */
+ 
 (function() {
   'use strict';
-
+  // var myWorker = new Worker('scripts/jsqrcode/qrworker.js');
+  
   var QRCodeCamera = function(element) {
     // Controls the Camera and the QRCode Module
 
     var cameraManager = new CameraManager('camera');
     var qrCodeManager = new QRCodeManager('qrcode');
-
+    // 
 
     cameraManager.onframe = function() {
       // There is a frame in the camera, what should we do with it?
- 
+  
       var imageData = cameraManager.getImageData();
+      
+       
       var detectedQRCode = qrCodeManager.detectQRCode(imageData, function(url) {
         if(url !== undefined) {
+          console.log(url);
           qrCodeManager.showDialog(url);
         }
       });
+      
     
     };
   };
 
+    
   var QRCodeManager = function(element) {
     var root = document.getElementById(element);
     var canvas = document.getElementById("qr-canvas");
@@ -46,22 +53,45 @@
     var qrcodeNavigate = root.querySelector(".QRCodeSuccessDialog-navigate");
     var qrcodeIgnore = root.querySelector(".QRCodeSuccessDialog-ignore");
 
-    var client = new QRClient();
+    
 
+    var client = new QRClient();
+    var myWorker = new Worker('scripts/jsqrcode/qrworker.js');
+    
     var self = this;
 
     this.currentUrl = undefined;
+   
+    
+    
 
-
-    this.detectQRCode = function(imageData, callback) {
+    this.detectQRCode = function(imageData, callback) { 
       callback = callback || function() {};
-
-      client.decode(imageData, function(result) {
+      myWorker.postMessage(imageData);
+      
+      myWorker.onmessage = function(result) {
+        //console.log(result.data);
+        var url = result.data;
+        if(url !== undefined) {
+          //console.log(url);
+          self.currentUrl = url;
+        } callback(url);
+      };
+      
+      myWorker.onerror = function(error) {
+        function WorkerException(message) {
+          this.name = 'Worker Exception';
+          this.message = message;
+        }
+        console.log(error);
+      };
+      /* client.decode(imageData, function(result) {
         if(result !== undefined) {
           self.currentUrl = result;
         }
         callback(result);
       });
+      */
     };
 
     this.showDialog = function(url) {
@@ -180,8 +210,11 @@
       return (cameraVideo.videoWidth > 0);
     };
 
-    var captureFrame = function() {
+    
 
+  
+    var captureFrame = function() {
+      //console.log('frame');
       // Work out which part of the video to capture and apply to canvas.
       canvas.drawImage(cameraVideo, sx /scaleFactor, sy/scaleFactor, sWidth/scaleFactor, sHeight/scaleFactor, dx, dy, dWidth, dHeight);
 
@@ -189,8 +222,9 @@
 
       // A frame has been captured.
       if(self.onframe) self.onframe();
-
+      
       coordinatesHaveChanged = false;
+      requestAnimationFrame(captureFrame.bind(self));
     };
 
     var getCamera = function(videoSource, cb) {
@@ -221,7 +255,8 @@
           
           var isSetup = setupVariables(e);
           if(isSetup) {
-            setInterval(captureFrame.bind(self), 4);
+            // setInterval(captureFrame.bind(self), 4);
+            requestAnimationFrame(captureFrame.bind(self));
           }
           else {
             // This is just to get around the fact that the videoWidth is not
@@ -229,7 +264,8 @@
             setTimeout(function() {
               setupVariables(e);
 
-              setInterval(captureFrame.bind(self), 4);
+              requestAnimationFrame(captureFrame.bind(self));
+              // setInterval(captureFrame.bind(self), 4);
             }, 100);
           }
 
